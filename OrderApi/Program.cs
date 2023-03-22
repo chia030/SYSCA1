@@ -1,10 +1,28 @@
 using Microsoft.EntityFrameworkCore;
 using OrderApi.Data;
-using OrderApi.Models;
+using OrderApi.Infrastructure;
+using SharedModels;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Base URL for the product service when the solution is executed using docker-compose.
+// The product service (running as a container) listens on this URL for HTTP requests
+// from other services specified in the docker compose file (which in this solution is
+// the order service).
+string productServiceBaseUrl = "http://productapi/products/";
+string customerServiceBaseUrl = "http://customerapi/customers/";
+
+// RabbitMQ connection string (I use CloudAMQP as a RabbitMQ server).
+// Remember to replace this connectionstring with your own.
+string cloudAMQPConnectionString =
+   "host=sparrow-01.rmq.cloudamqp.com;virtualHost=nrnvrdcp;username=nrnvrdcp;password=b9CHBlx7fiFXyRUD4zaVfVvTI-Vbnw8u";
+
+// Use this connection string if you want to run RabbitMQ server as a container
+// (see docker-compose.yml)
+//string cloudAMQPConnectionString = "host=rabbitmq";
+
+
+// Register services for dependency injection.
 
 builder.Services.AddDbContext<OrderApiContext>(opt => opt.UseInMemoryDatabase("OrdersDb"));
 
@@ -13,6 +31,18 @@ builder.Services.AddScoped<IRepository<Order>, OrderRepository>();
 
 // Register database initializer for dependency injection
 builder.Services.AddTransient<IDbInitializer, DbInitializer>();
+
+// Register product service gateway for dependency injection
+builder.Services.AddSingleton<IServiceGateway<ProductDto>>(new
+    ProductServiceGateway(productServiceBaseUrl));
+
+builder.Services.AddSingleton<IServiceGateway<CustomerDto>>(new
+    CustomerServiceGateway(customerServiceBaseUrl));
+
+// Register MessagePublisher (a messaging gateway) for dependency injection
+builder.Services.AddSingleton<IMessagePublisher>(new
+    MessagePublisher(cloudAMQPConnectionString));
+
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -37,7 +67,7 @@ using (var scope = app.Services.CreateScope())
     dbInitializer.Initialize(dbContext);
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseAuthorization();
 

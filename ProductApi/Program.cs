@@ -1,10 +1,22 @@
 using Microsoft.EntityFrameworkCore;
 using ProductApi.Data;
+using ProductApi.Infrastructure;
 using ProductApi.Models;
+using SharedModels;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// RabbitMQ connection string (I use CloudAMQP as a RabbitMQ server).
+// Remember to replace this connectionstring with your own.
+string cloudAMQPConnectionString =
+    "host=sparrow-01.rmq.cloudamqp.com;virtualHost=nrnvrdcp;username=nrnvrdcp;password=b9CHBlx7fiFXyRUD4zaVfVvTI-Vbnw8u";
+
+// Use this connection string if you want to run RabbitMQ server as a container
+// (see docker-compose.yml)
+//string cloudAMQPConnectionString = "host=rabbitmq";
+
+
+// Register services for dependency injection.
 
 builder.Services.AddDbContext<ProductApiContext>(opt => opt.UseInMemoryDatabase("ProductsDb"));
 
@@ -13,6 +25,10 @@ builder.Services.AddScoped<IRepository<Product>, ProductRepository>();
 
 // Register database initializer for dependency injection
 builder.Services.AddTransient<IDbInitializer, DbInitializer>();
+
+// Register ProductConverter for dependency injection
+builder.Services.AddSingleton<IConverter<Product, ProductDto>, ProductConverter>();
+
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -37,7 +53,11 @@ using (var scope = app.Services.CreateScope())
     dbInitializer.Initialize(dbContext);
 }
 
-app.UseHttpsRedirection();
+// Create a message listener in a separate thread.
+Task.Factory.StartNew(() =>
+    new MessageListener(app.Services, cloudAMQPConnectionString).Start());
+
+//app.UseHttpsRedirection();
 
 app.UseAuthorization();
 

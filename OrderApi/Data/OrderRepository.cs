@@ -1,12 +1,12 @@
 ﻿using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
-using OrderApi.Models;
+using SharedModels;
 using System;
 
 namespace OrderApi.Data
 {
-    public class OrderRepository : IRepository<Order>
+    public class OrderRepository : IOrderRepository
     {
         private readonly OrderApiContext db;
 
@@ -15,33 +15,42 @@ namespace OrderApi.Data
             db = context;
         }
 
-        Order IRepository<Order>.Add(Order entity)
+        public Order Add(Order entity)
         {
             if (entity.Date == null)
                 entity.Date = DateTime.Now;
-            
+
             var newOrder = db.Orders.Add(entity).Entity;
             db.SaveChanges();
             return newOrder;
         }
 
-        void IRepository<Order>.Edit(Order entity)
+        public void Edit(Order entity)
         {
             db.Entry(entity).State = EntityState.Modified;
             db.SaveChanges();
         }
 
-        Order IRepository<Order>.Get(int id)
+        public Order Get(int id)
         {
-            return db.Orders.FirstOrDefault(o => o.Id == id);
+            return db.Orders.Include(o => o.OrderLines).FirstOrDefault(o => o.Id == id);
         }
 
-        IEnumerable<Order> IRepository<Order>.GetAll()
+        public IEnumerable<Order> GetAll()
         {
             return db.Orders.ToList();
         }
 
-        void IRepository<Order>.Remove(int id)
+        public IEnumerable<Order> GetByCustomer(int customerId)
+        {
+            var ordersForCustomer = from o in db.Orders
+                where o.customerId == customerId
+                select o;
+
+            return ordersForCustomer.ToList();
+        }
+
+        public void Remove(int id)
         {
             var order = db.Orders.FirstOrDefault(p => p.Id == id);
             db.Orders.Remove(order);
